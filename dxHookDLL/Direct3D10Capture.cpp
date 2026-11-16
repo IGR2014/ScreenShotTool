@@ -12,7 +12,7 @@
 
 // Windows
 #include <windows.h>
-#include <d3d10.h>
+#include <d3d10_1.h>
 #include <wrl/client.h>
 // C++
 #include <atomic>
