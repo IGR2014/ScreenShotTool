@@ -15,6 +15,7 @@
 // ScreenShotTool hook
 #include <dxHookDLL/Capture.hpp>
 #include <dxHookDLL/Direct3D9Capture.hpp>
+#include <dxHookDLL/Direct3D10Capture.hpp>
 #include <dxHookDLL/Direct3D11Capture.hpp>
 #include <dxHookDLL/OpenGLCapture.hpp>
 // Tests
@@ -24,6 +25,7 @@
 // The three capture classes must satisfy the FrameCapture concept that the
 // shared thread driver is constrained on (compile-time contract).
 static_assert(sst::FrameCapture<sst::Direct3D9Capture>);
+static_assert(sst::FrameCapture<sst::Direct3D10Capture>);
 static_assert(sst::FrameCapture<sst::Direct3D11Capture>);
 static_assert(sst::FrameCapture<sst::OpenGLCapture>);
 

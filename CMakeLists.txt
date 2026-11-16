@@ -68,6 +68,7 @@ add_library(
 	dxHookDLL/WICImage.cpp
 	dxHookDLL/InlineHook.cpp
 	dxHookDLL/Direct3D9Capture.cpp
+	dxHookDLL/Direct3D10Capture.cpp
 	dxHookDLL/Direct3D11Capture.cpp
 	dxHookDLL/OpenGLCapture.cpp
 )
@@ -80,6 +81,7 @@ target_link_libraries(
 	hook
 	PRIVATE
 	d3d9
+	d3d10
 	d3d11
 	opengl32
 	windowscodecs
