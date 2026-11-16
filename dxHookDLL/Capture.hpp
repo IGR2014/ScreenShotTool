@@ -37,7 +37,7 @@ namespace sst {
 	/// shape, so a single thread driver can run any of them.
 	/// @tparam T Candidate capture type
 	template<class T>
-	concept Screenshoter = std::default_initializable<T> && requires(T capturer) {
+	concept FrameCapture = std::default_initializable<T> && requires(T capturer) {
 		{ capturer.search() } -> std::same_as<bool>;	// Locate the API in the host process
 		{ capturer.hook()   } -> std::same_as<bool>;	// Arm a one-shot capture of the next frame
 		{ capturer.hooked() } -> std::same_as<bool>;	// Whether a capture is already armed
@@ -71,10 +71,10 @@ namespace sst {
 
 
 	/// @brief Capture-thread body: wait for the API, then capture on each hotkey press
-	/// @tparam T Capture type satisfying @ref Screenshoter
+	/// @tparam T Capture type satisfying @ref FrameCapture
 	/// @param keepRunning Shared flag cleared on DLL detach to stop the loop
 	/// @return Thread exit code
-	template<Screenshoter T>
+	template<FrameCapture T>
 	auto runCaptureThread(std::atomic<bool>& keepRunning) noexcept -> ::DWORD {
 
 		const auto capturer {std::make_unique<T>()};

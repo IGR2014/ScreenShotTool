@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////
 ///
 ///	@file
-///	@brief		OpenGL screenshoter (SwapBuffers hook + glReadPixels)
+///	@brief		OpenGL frame capture (SwapBuffers hook + glReadPixels)
 ///	@date		16 Nov 2026
 ///
 ///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
@@ -34,7 +34,7 @@ namespace sst {
 	/// Rewritten from the original non-functional stub: glReadPixels runs on
 	/// the host's render thread inside the SwapBuffers detour, where a current
 	/// GL context exists, then the frame is saved through WIC.
-	class GLScreenshoter final {
+	class OpenGLCapture final {
 
 		::LPBYTE  mTarget {nullptr}; ///< SwapBuffers entry point
 		InlineHook mHook {};		///< SwapBuffers trampoline
@@ -43,16 +43,16 @@ namespace sst {
 	public:
 
 		/// @brief Constructor (registers this as the active instance)
-		GLScreenshoter() noexcept;
+		OpenGLCapture() noexcept;
 
 		// Non-copyable, non-movable (registered via a global raw pointer)
-		GLScreenshoter(const GLScreenshoter&)			= delete;
-		GLScreenshoter(GLScreenshoter&&)			= delete;
-		auto operator=(const GLScreenshoter&) -> GLScreenshoter&	= delete;
-		auto operator=(GLScreenshoter&&) -> GLScreenshoter&	= delete;
+		OpenGLCapture(const OpenGLCapture&)			= delete;
+		OpenGLCapture(OpenGLCapture&&)			= delete;
+		auto operator=(const OpenGLCapture&) -> OpenGLCapture&	= delete;
+		auto operator=(OpenGLCapture&&) -> OpenGLCapture&	= delete;
 
 		/// @brief Destructor
-		~GLScreenshoter() noexcept;
+		~OpenGLCapture() noexcept;
 
 		/// @brief Locate SwapBuffers in the host process
 		/// @return true if OpenGL was found and SwapBuffers resolved
@@ -76,7 +76,7 @@ namespace sst {
 	/// @brief Hook thread: finds OpenGL, then captures on hotkey
 	/// @param param Pointer to the shared "keep running" flag (std::atomic<bool>)
 	/// @return Thread exit code
-	auto __stdcall HookOpenGL(::LPVOID param) noexcept -> ::DWORD;
+	auto __stdcall openGLCaptureThread(::LPVOID param) noexcept -> ::DWORD;
 
 
 } // namespace sst

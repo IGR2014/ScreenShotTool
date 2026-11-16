@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tag
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ github.event.inputs.tag }}' } else { '${{ github.ref_name }}' }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Build x64
+        run: |
+          cmake -S . -B build64 -A x64 -DSST_BUILD_TESTS=OFF
+          cmake --build build64 --config Release --parallel
+
+      - name: Build Win32
+        run: |
+          cmake -S . -B build32 -A Win32 -DSST_BUILD_TESTS=OFF
+          cmake --build build32 --config Release --parallel
+
+      - name: Stage artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          # 32-bit injector launches the 64-bit helper, so ship both hook DLLs,
+          # the 32-bit GUI and the 64-bit patcher together.
+          Copy-Item build32/Release/DLLInjector.exe dist/
+          Copy-Item build32/Release/hookX86.dll     dist/
+          Copy-Item build64/Release/hookX64.dll     dist/
+          Copy-Item build64/Release/x64Patcher.exe  dist/
+          Copy-Item README.md                       dist/
+          Compress-Archive -Path dist/* -DestinationPath "ScreenShotTool-${{ steps.tag.outputs.tag }}.zip"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.tag.outputs.tag }}" `
+            "ScreenShotTool-${{ steps.tag.outputs.tag }}.zip" `
+            --title "ScreenShotTool ${{ steps.tag.outputs.tag }}" `
+            --generate-notes

@@ -19,9 +19,9 @@
 // ScreenShotTool common
 #include <common/Common.hpp>
 // ScreenShotTool hook
-#include "DX9Screenshoter.hpp"
-#include "DX11Screenshoter.hpp"
-#include "GLScreenshoter.hpp"
+#include "Direct3D9Capture.hpp"
+#include "Direct3D11Capture.hpp"
+#include "OpenGLCapture.hpp"
 #include "Globals.hpp"
 #include "Log.hpp"
 
@@ -30,9 +30,7 @@
 namespace sst {
 
 
-	// Global definitions declared in Log.hpp / Globals.hpp
-	Logger			gLog {};
-	std::filesystem::path	gScreenDir {};
+	// gLog / gScreenDir are defined in Globals.cpp (shared with the tests)
 
 
 	/// @brief Anonymous namespace for DLL-local state
@@ -81,9 +79,9 @@ namespace sst {
 			sst::gLog.line(L"======================================");
 
 			// One capture thread per supported graphics API
-			static_cast<void>(::CreateThread(nullptr, 0U, &sst::HookDX9, &sst::gKeepRunning, 0U, nullptr));
-			static_cast<void>(::CreateThread(nullptr, 0U, &sst::HookDX11, &sst::gKeepRunning, 0U, nullptr));
-			static_cast<void>(::CreateThread(nullptr, 0U, &sst::HookOpenGL, &sst::gKeepRunning, 0U, nullptr));
+			static_cast<void>(::CreateThread(nullptr, 0U, &sst::direct3D9CaptureThread, &sst::gKeepRunning, 0U, nullptr));
+			static_cast<void>(::CreateThread(nullptr, 0U, &sst::direct3D11CaptureThread, &sst::gKeepRunning, 0U, nullptr));
+			static_cast<void>(::CreateThread(nullptr, 0U, &sst::openGLCaptureThread, &sst::gKeepRunning, 0U, nullptr));
 
 		} break;
 

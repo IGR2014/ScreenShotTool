@@ -18,6 +18,7 @@
 
 // Windows
 #include <windows.h>
+#include <shellapi.h>
 #include <tlhelp32.h>
 // C++
 #include <array>

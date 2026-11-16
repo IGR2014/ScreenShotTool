@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////
 ///
 ///	@file
-///	@brief		OpenGL screenshoter implementation
+///	@brief		OpenGL frame capture implementation
 ///	@date		16 Nov 2026
 ///
 ///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
@@ -24,7 +24,7 @@
 // ScreenShotTool common
 #include <common/Common.hpp>
 // ScreenShotTool hook
-#include "GLScreenshoter.hpp"
+#include "OpenGLCapture.hpp"
 #include "Capture.hpp"
 #include "Globals.hpp"
 #include "Log.hpp"
@@ -44,7 +44,7 @@ namespace sst {
 
 
 	// Active instance, so the static detour can reach its owner and unhook
-	constinit static GLScreenshoter* gActive {nullptr};
+	constinit static OpenGLCapture* gActive {nullptr};
 	// Trampoline to the original SwapBuffers(), set while the hook is installed
 	constinit static SwapBuffersFn gOriginalSwapBuffers {nullptr};
 
@@ -94,13 +94,13 @@ namespace sst {
 
 
 	// Constructor (registers this as the active instance)
-	GLScreenshoter::GLScreenshoter() noexcept {
+	OpenGLCapture::OpenGLCapture() noexcept {
 		gActive = this;
 		gLog.line(L"OpenGL screenshoter initialized.");
 	}
 
 	// Locate SwapBuffers in the host process
-	auto GLScreenshoter::search() noexcept -> bool {
+	auto OpenGLCapture::search() noexcept -> bool {
 		// Only bother once the host has loaded OpenGL
 		if (nullptr == ::GetModuleHandleW(L"opengl32.dll")) {
 			return false;
@@ -119,7 +119,7 @@ namespace sst {
 	}
 
 	// Install the SwapBuffers hook
-	auto GLScreenshoter::hook() noexcept -> bool {
+	auto OpenGLCapture::hook() noexcept -> bool {
 		if (nullptr == mTarget) {
 			return false;
 		}
@@ -128,17 +128,17 @@ namespace sst {
 	}
 
 	// Remove the SwapBuffers hook
-	auto GLScreenshoter::unhook() noexcept -> bool {
+	auto OpenGLCapture::unhook() noexcept -> bool {
 		return mHook.uninstall();
 	}
 
 	// Whether a one-shot capture is currently armed
-	auto GLScreenshoter::hooked() const noexcept -> bool {
+	auto OpenGLCapture::hooked() const noexcept -> bool {
 		return mHook.installed();
 	}
 
 	// Destructor
-	GLScreenshoter::~GLScreenshoter() noexcept {
+	OpenGLCapture::~OpenGLCapture() noexcept {
 		static_cast<void>(mHook.uninstall());
 		if (this == gActive) {
 			gActive = nullptr;
@@ -148,8 +148,8 @@ namespace sst {
 
 
 	// Capture thread: waits for the API, then captures on each hotkey press
-	auto __stdcall HookOpenGL(::LPVOID param) noexcept -> ::DWORD {
-		return runCaptureThread<GLScreenshoter>(*static_cast<std::atomic<bool>*>(param));
+	auto __stdcall openGLCaptureThread(::LPVOID param) noexcept -> ::DWORD {
+		return runCaptureThread<OpenGLCapture>(*static_cast<std::atomic<bool>*>(param));
 	}
 
 

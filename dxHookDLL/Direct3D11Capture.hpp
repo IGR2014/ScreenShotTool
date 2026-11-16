@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////
 ///
 ///	@file
-///	@brief		Direct3D 11 screenshoter (IDXGISwapChain::Present hook)
+///	@brief		Direct3D 11 frame capture (IDXGISwapChain::Present hook)
 ///	@date		16 Nov 2026
 ///
 ///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
@@ -35,7 +35,7 @@ namespace sst {
 
 
 	/// @brief Captures a Direct3D 11 frame by hooking IDXGISwapChain::Present()
-	class DX11Screenshoter final {
+	class Direct3D11Capture final {
 
 		Microsoft::WRL::ComPtr<::ID3D11Device>		mDevice {};	///< Dummy device (for vtable discovery)
 		Microsoft::WRL::ComPtr<::ID3D11DeviceContext>	mContext {};	///< Dummy context
@@ -47,16 +47,16 @@ namespace sst {
 	public:
 
 		/// @brief Constructor (registers this as the active instance)
-		DX11Screenshoter() noexcept;
+		Direct3D11Capture() noexcept;
 
 		// Non-copyable, non-movable (registered via a global raw pointer)
-		DX11Screenshoter(const DX11Screenshoter&)			= delete;
-		DX11Screenshoter(DX11Screenshoter&&)				= delete;
-		auto operator=(const DX11Screenshoter&) -> DX11Screenshoter&	= delete;
-		auto operator=(DX11Screenshoter&&) -> DX11Screenshoter&		= delete;
+		Direct3D11Capture(const Direct3D11Capture&)			= delete;
+		Direct3D11Capture(Direct3D11Capture&&)				= delete;
+		auto operator=(const Direct3D11Capture&) -> Direct3D11Capture&	= delete;
+		auto operator=(Direct3D11Capture&&) -> Direct3D11Capture&		= delete;
 
 		/// @brief Destructor
-		~DX11Screenshoter() noexcept;
+		~Direct3D11Capture() noexcept;
 
 		/// @brief Locate the swap chain vtable in the host process
 		/// @return true if Direct3D 11 was found and the vtable captured
@@ -80,7 +80,7 @@ namespace sst {
 	/// @brief Hook thread: finds Direct3D 11, then captures on hotkey
 	/// @param param Pointer to the shared "keep running" flag (std::atomic<bool>)
 	/// @return Thread exit code
-	auto __stdcall HookDX11(::LPVOID param) noexcept -> ::DWORD;
+	auto __stdcall direct3D11CaptureThread(::LPVOID param) noexcept -> ::DWORD;
 
 
 } // namespace sst

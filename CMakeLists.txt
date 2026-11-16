@@ -25,11 +25,17 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS	ON)
 # Hidden inline visibility
 set(CMAKE_VISIBILITY_INLINES_HIDDEN	True)
 
+# Unicode Win32 APIs and a leaner windows.h for every target
+add_compile_definitions(UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+
 # MinGW needs -municode so the Unicode entry points (wWinMain / wmain) are used
 if(MINGW)
 	add_compile_options(-municode)
 	add_link_options(-municode)
 endif()
+
+# Build the test suite (on by default; off automatically when used as a subproject)
+option(SST_BUILD_TESTS "Build ScreenShotTool tests" ${PROJECT_IS_TOP_LEVEL})
 
 # Hook DLL name follows the target bitness (hookX64 / hookX86)
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -57,12 +63,13 @@ add_library(
 	hook
 	SHARED
 	dxHookDLL/DLLMain.cpp
+	dxHookDLL/Globals.cpp
 	dxHookDLL/Log.cpp
 	dxHookDLL/WICImage.cpp
 	dxHookDLL/InlineHook.cpp
-	dxHookDLL/DX9Screenshoter.cpp
-	dxHookDLL/DX11Screenshoter.cpp
-	dxHookDLL/GLScreenshoter.cpp
+	dxHookDLL/Direct3D9Capture.cpp
+	dxHookDLL/Direct3D11Capture.cpp
+	dxHookDLL/OpenGLCapture.cpp
 )
 target_include_directories(
 	hook
@@ -114,3 +121,10 @@ target_link_libraries(
 	sst_common
 	user32
 )
+
+
+# Tests
+if(SST_BUILD_TESTS)
+	enable_testing()
+	add_subdirectory(tests)
+endif()
