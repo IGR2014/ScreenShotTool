@@ -21,7 +21,7 @@
 #include <atomic>
 #include <cstdint>
 // ScreenShotTool hook
-#include "HookFunction.hpp"
+#include "InlineHook.hpp"
 
 
 // ScreenShotTool hook code zone
@@ -38,7 +38,7 @@ namespace sst {
 		Microsoft::WRL::ComPtr<::IDirect3D9>	   mD3D {};	///< Dummy Direct3D 9 object
 		Microsoft::WRL::ComPtr<::IDirect3DDevice9> mDevice {};	///< Dummy device (owns the vtable we read)
 		std::uintptr_t*			   mVTable {nullptr}; ///< Device vtable
-		funcHook				   mHook {};	///< EndScene() trampoline
+		InlineHook				   mHook {};	///< EndScene() trampoline
 
 
 	public:
@@ -65,7 +65,11 @@ namespace sst {
 		auto hook() noexcept -> bool;
 		/// @brief Remove the EndScene() hook
 		/// @return true if a hook was removed
-		auto unHook() noexcept -> bool;
+		auto unhook() noexcept -> bool;
+		/// @brief Whether a one-shot capture is currently armed
+		/// @return true while the hook is installed
+		[[nodiscard]]
+		auto hooked() const noexcept -> bool;
 
 	};
 

@@ -18,7 +18,7 @@
 // C++
 #include <atomic>
 // ScreenShotTool hook
-#include "HookFunction.hpp"
+#include "InlineHook.hpp"
 
 
 // ScreenShotTool hook code zone
@@ -37,7 +37,7 @@ namespace sst {
 	class GLScreenshoter final {
 
 		::LPBYTE  mTarget {nullptr}; ///< SwapBuffers entry point
-		funcHook  mHook {};		///< SwapBuffers trampoline
+		InlineHook mHook {};		///< SwapBuffers trampoline
 
 
 	public:
@@ -64,7 +64,11 @@ namespace sst {
 		auto hook() noexcept -> bool;
 		/// @brief Remove the SwapBuffers hook
 		/// @return true if a hook was removed
-		auto unHook() noexcept -> bool;
+		auto unhook() noexcept -> bool;
+		/// @brief Whether a one-shot capture is currently armed
+		/// @return true while the hook is installed
+		[[nodiscard]]
+		auto hooked() const noexcept -> bool;
 
 	};
 

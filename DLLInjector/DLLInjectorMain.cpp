@@ -46,6 +46,9 @@ namespace sst {
 	constexpr auto LABEL_NAME {L"Name:"sv};			///< Executable name label
 	constexpr auto LABEL_PID {L"Process ID:"sv};		///< Process ID label
 	constexpr auto BUTTON_OPEN {L"Open folder"sv};		///< Open-folder button caption
+	constexpr auto STATUS_WAITING {L"Waiting for a supported game..."sv};	///< Idle status text
+	constexpr auto HOTKEY_HINT {L"In game, press F10 or Print Screen to capture."sv};	///< Capture hint
+	constexpr auto UI_FONT_FACE {L"Segoe UI"sv};		///< Control font face
 
 	// File names, relative to the injector directory
 	constexpr auto SCREENSHOTS_DIR {L"Screenshots"sv};	///< Screenshots subfolder
@@ -163,10 +166,20 @@ namespace sst {
 		DLLInjector		gInjector {};		///< Shared injector instance
 		std::optional<::DWORD>	gHookedID {};		///< Currently hooked process, if any
 
+		::HWND gStatus {nullptr};	///< Live status line
 		::HWND gExeName {nullptr};	///< Executable-name label
 		::HWND gExePID {nullptr};	///< Process-ID label
+		::HWND gHint {nullptr};		///< Hotkey hint line
 		::HWND gPathEdit {nullptr};	///< Screenshots-path edit box
 		::HWND gOpenButton {nullptr};	///< Open-folder button
+		::HFONT gFont {nullptr};	///< Shared UI font (Segoe UI)
+
+
+		/// @brief Set the live status line text
+		/// @param text New status text
+		void setStatus(const std::wstring_view text) noexcept {
+			::SetWindowTextW(gStatus, text.data());
+		}
 
 
 		/// @brief Inject the matching hook DLL into a freshly found process
@@ -197,9 +210,11 @@ namespace sst {
 			gHookedID = target.id;
 
 			// Reflect the hooked process in the UI
+			const auto arch {is64 ? L"64-bit"sv : L"32-bit"sv};
+			setStatus(std::format(L"Hooked ({}) - capturing on hotkey.", arch));
 			::SetWindowTextW(gExeName, std::format(L"{}\t\t{}", LABEL_NAME, target.name).c_str());
 			::SetWindowTextW(gExePID, std::format(L"{}\t0x{:04X} ({})", LABEL_PID, target.id, target.id).c_str());
-			::SetWindowTextW(window, std::format(L"{} [{}]", PROGRAM_TITLE, target.name).c_str());
+			::SetWindowTextW(window, std::format(L"{} - [{}]", PROGRAM_TITLE, target.name).c_str());
 		}
 
 		/// @brief Verify the hooked process is still alive, else reset the UI
@@ -222,6 +237,7 @@ namespace sst {
 
 			// Target gone: reset the UI
 			gHookedID.reset();
+			setStatus(STATUS_WAITING);
 			::SetWindowTextW(window, PROGRAM_TITLE.data());
 			::SetWindowTextW(gExeName, LABEL_NAME.data());
 			::SetWindowTextW(gExePID, LABEL_PID.data());
@@ -234,10 +250,20 @@ namespace sst {
 			const auto instance {std::bit_cast<::HINSTANCE>(::GetWindowLongPtrW(window, GWLP_HINSTANCE))};
 			const auto child {static_cast<::DWORD>(WS_CHILD | WS_VISIBLE)};
 
-			gExePID = ::CreateWindowW(L"STATIC", LABEL_PID.data(), child, 84, 15, 300, 20, window, nullptr, instance, nullptr);
-			gExeName = ::CreateWindowW(L"STATIC", LABEL_NAME.data(), child, 84, 45, 300, 20, window, nullptr, instance, nullptr);
-			gPathEdit = ::CreateWindowW(L"EDIT", gScreenshotsDir.wstring().c_str(), child | WS_BORDER | ES_READONLY | ES_AUTOHSCROLL, 10, 84, 370, 20, window, nullptr, instance, nullptr);
-			gOpenButton = ::CreateWindowW(L"BUTTON", BUTTON_OPEN.data(), child | WS_TABSTOP, 280, 114, 100, 30, window, std::bit_cast<::HMENU>(static_cast<std::intptr_t>(ID_OPEN_FOLDER_BUTTON)), instance, nullptr);
+			// A modern UI font (Win32 controls default to the old bitmap system font)
+			gFont = ::CreateFontW(-15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, UI_FONT_FACE.data());
+
+			gStatus	    = ::CreateWindowW(L"STATIC", STATUS_WAITING.data(), child, 14, 14, 404, 22, window, nullptr, instance, nullptr);
+			gExeName    = ::CreateWindowW(L"STATIC", LABEL_NAME.data(), child, 14, 46, 404, 22, window, nullptr, instance, nullptr);
+			gExePID	    = ::CreateWindowW(L"STATIC", LABEL_PID.data(), child, 14, 72, 404, 22, window, nullptr, instance, nullptr);
+			gHint	    = ::CreateWindowW(L"STATIC", HOTKEY_HINT.data(), child, 14, 104, 404, 22, window, nullptr, instance, nullptr);
+			gPathEdit   = ::CreateWindowW(L"EDIT", gScreenshotsDir.wstring().c_str(), child | WS_BORDER | ES_READONLY | ES_AUTOHSCROLL, 14, 140, 404, 24, window, nullptr, instance, nullptr);
+			gOpenButton = ::CreateWindowW(L"BUTTON", BUTTON_OPEN.data(), child | WS_TABSTOP, 300, 174, 118, 30, window, std::bit_cast<::HMENU>(static_cast<std::intptr_t>(ID_OPEN_FOLDER_BUTTON)), instance, nullptr);
+
+			// Apply the shared font to every control
+			for (const auto control : {gStatus, gExeName, gExePID, gHint, gPathEdit, gOpenButton}) {
+				::SendMessageW(control, WM_SETFONT, std::bit_cast<::WPARAM>(gFont), TRUE);
+			}
 		}
 
 	} // namespace
@@ -271,6 +297,10 @@ namespace sst {
 
 			case WM_DESTROY: {
 				::KillTimer(window, WINDOW_TIMER);
+				if (nullptr != gFont) {
+					::DeleteObject(gFont);
+					gFont = nullptr;
+				}
 				::PostQuitMessage(0);
 			} break;
 
@@ -287,6 +317,9 @@ namespace sst {
 
 // GUI entry point
 auto __stdcall wWinMain(const ::HINSTANCE instance, [[maybe_unused]] ::HINSTANCE prevInstance, [[maybe_unused]] ::LPWSTR cmdLine, const int showCmd) -> int {
+
+	// Crisp text and correct metrics on high-DPI displays
+	::SetProcessDPIAware();
 
 	// Resolve the injector directory and the screenshots folder once
 	std::array<wchar_t, MAX_PATH> moduleBuffer {};
@@ -306,7 +339,7 @@ auto __stdcall wWinMain(const ::HINSTANCE instance, [[maybe_unused]] ::HINSTANCE
 	}
 
 	// Create and show the main window
-	const auto window {::CreateWindowW(sst::PROGRAM_TITLE.data(), sst::PROGRAM_TITLE.data(), WS_BORDER | WS_SYSMENU | WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT, 400, 180, nullptr, nullptr, instance, nullptr)};
+	const auto window {::CreateWindowW(sst::PROGRAM_TITLE.data(), sst::PROGRAM_TITLE.data(), WS_BORDER | WS_SYSMENU | WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT, 450, 250, nullptr, nullptr, instance, nullptr)};
 	if (nullptr == window) {
 		return 2;
 	}
