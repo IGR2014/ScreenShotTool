@@ -17,6 +17,7 @@ add_executable(
 	test_Common.cpp
 	${CMAKE_SOURCE_DIR}/dxHookDLL/InlineHook.cpp
 	${CMAKE_SOURCE_DIR}/dxHookDLL/Direct3D9Capture.cpp
+	${CMAKE_SOURCE_DIR}/dxHookDLL/Direct3D10Capture.cpp
 	${CMAKE_SOURCE_DIR}/dxHookDLL/Direct3D11Capture.cpp
 	${CMAKE_SOURCE_DIR}/dxHookDLL/OpenGLCapture.cpp
 	${CMAKE_SOURCE_DIR}/dxHookDLL/Globals.cpp
@@ -26,7 +27,7 @@ add_executable(
 target_link_libraries(
 	test_Common
 	PRIVATE
-	d3d9 d3d11 opengl32 windowscodecs ole32 gdi32 user32
+	d3d9 d3d10 d3d11 opengl32 windowscodecs ole32 gdi32 user32
 )
 
 # Command-line parsing

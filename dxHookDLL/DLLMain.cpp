@@ -20,6 +20,7 @@
 #include <common/Common.hpp>
 // ScreenShotTool hook
 #include "Direct3D9Capture.hpp"
+#include "Direct3D10Capture.hpp"
 #include "Direct3D11Capture.hpp"
 #include "OpenGLCapture.hpp"
 #include "Globals.hpp"
@@ -80,6 +81,7 @@ namespace sst {
 
 			// One capture thread per supported graphics API
 			static_cast<void>(::CreateThread(nullptr, 0U, &sst::direct3D9CaptureThread, &sst::gKeepRunning, 0U, nullptr));
+			static_cast<void>(::CreateThread(nullptr, 0U, &sst::direct3D10CaptureThread, &sst::gKeepRunning, 0U, nullptr));
 			static_cast<void>(::CreateThread(nullptr, 0U, &sst::direct3D11CaptureThread, &sst::gKeepRunning, 0U, nullptr));
 			static_cast<void>(::CreateThread(nullptr, 0U, &sst::openGLCaptureThread, &sst::gKeepRunning, 0U, nullptr));
 

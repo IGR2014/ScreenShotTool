@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/IGR2014/ScreenShotTool/actions/workflows/ci.yml/badge.svg)](https://github.com/IGR2014/ScreenShotTool/actions/workflows/ci.yml)
 
-In-game screenshot tool for **Direct3D 9**, **Direct3D 11** and **OpenGL**
+In-game screenshot tool for **Direct3D 9**, **Direct3D 10**, **Direct3D 11** and **OpenGL**
 applications. A hook DLL is injected into the target process; on **F10** or
 **PrintScreen** it captures the current frame and writes it next to the DLL
 under `Screenshots/`, logging progress to `Logs/Log.txt`.
@@ -11,7 +11,7 @@ under `Screenshots/`, logging progress to `Logs/Log.txt`.
 
 | Component        | Kind | Description                                                                 |
 |------------------|------|-----------------------------------------------------------------------------|
-| `hookX86/X64`    | DLL  | Hooks `IDirect3DDevice9::EndScene`, `IDXGISwapChain::Present` and `SwapBuffers`, then saves the frame via WIC. |
+| `hookX86/X64`    | DLL  | Hooks `IDirect3DDevice9::EndScene`, `IDXGISwapChain::Present` (Direct3D 10 and 11) and `SwapBuffers`, then saves the frame via WIC. |
 | `DLLInjector`    | GUI  | Watches for known target processes and injects the matching hook DLL.       |
 | `x64Patcher`     | CLI  | 64-bit helper the 32-bit GUI launches to inject into 64-bit targets.        |
 | `common`         | lib  | Shared DLL injector and Win32 RAII helpers.                                 |
