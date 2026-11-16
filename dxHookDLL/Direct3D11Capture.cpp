@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////
 ///
 ///	@file
-///	@brief		Direct3D 11 screenshoter implementation
+///	@brief		Direct3D 11 frame capture implementation
 ///	@date		16 Nov 2026
 ///
 ///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
@@ -24,7 +24,7 @@
 // ScreenShotTool common
 #include <common/Common.hpp>
 // ScreenShotTool hook
-#include "DX11Screenshoter.hpp"
+#include "Direct3D11Capture.hpp"
 #include "Capture.hpp"
 #include "Globals.hpp"
 #include "Log.hpp"
@@ -49,7 +49,7 @@ namespace sst {
 
 
 	// Active instance, so the static detour can reach its owner and unhook
-	constinit static DX11Screenshoter* gActive {nullptr};
+	constinit static Direct3D11Capture* gActive {nullptr};
 	// Trampoline to the original Present(), set while the hook is installed
 	constinit static Present11 gOriginalPresent {nullptr};
 
@@ -140,13 +140,13 @@ namespace sst {
 
 
 	// Constructor (registers this as the active instance)
-	DX11Screenshoter::DX11Screenshoter() noexcept {
+	Direct3D11Capture::Direct3D11Capture() noexcept {
 		gActive = this;
 		gLog.line(L"DirectX 11 screenshoter initialized.");
 	}
 
 	// Locate the swap chain vtable in the host process
-	auto DX11Screenshoter::search() noexcept -> bool {
+	auto Direct3D11Capture::search() noexcept -> bool {
 
 		// Only bother if the host actually loaded Direct3D 11
 		if (nullptr == ::GetModuleHandleW(L"d3d11.dll")) {
@@ -185,7 +185,7 @@ namespace sst {
 	}
 
 	// Install the Present() hook
-	auto DX11Screenshoter::hook() noexcept -> bool {
+	auto Direct3D11Capture::hook() noexcept -> bool {
 		if (nullptr == mVTable) {
 			return false;
 		}
@@ -194,17 +194,17 @@ namespace sst {
 	}
 
 	// Remove the Present() hook
-	auto DX11Screenshoter::unhook() noexcept -> bool {
+	auto Direct3D11Capture::unhook() noexcept -> bool {
 		return mHook.uninstall();
 	}
 
 	// Whether a one-shot capture is currently armed
-	auto DX11Screenshoter::hooked() const noexcept -> bool {
+	auto Direct3D11Capture::hooked() const noexcept -> bool {
 		return mHook.installed();
 	}
 
 	// Destructor
-	DX11Screenshoter::~DX11Screenshoter() noexcept {
+	Direct3D11Capture::~Direct3D11Capture() noexcept {
 		static_cast<void>(mHook.uninstall());
 		if (this == gActive) {
 			gActive = nullptr;
@@ -214,8 +214,8 @@ namespace sst {
 
 
 	// Capture thread: waits for the API, then captures on each hotkey press
-	auto __stdcall HookDX11(::LPVOID param) noexcept -> ::DWORD {
-		return runCaptureThread<DX11Screenshoter>(*static_cast<std::atomic<bool>*>(param));
+	auto __stdcall direct3D11CaptureThread(::LPVOID param) noexcept -> ::DWORD {
+		return runCaptureThread<Direct3D11Capture>(*static_cast<std::atomic<bool>*>(param));
 	}
 
 

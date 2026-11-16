@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////
 ///
 ///	@file
-///	@brief		Direct3D 9 screenshoter (IDirect3DDevice9::EndScene hook)
+///	@brief		Direct3D 9 frame capture (IDirect3DDevice9::EndScene hook)
 ///	@date		16 Nov 2026
 ///
 ///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
@@ -33,7 +33,7 @@ namespace sst {
 
 
 	/// @brief Captures a Direct3D 9 frame by hooking IDirect3DDevice9::EndScene()
-	class DX9Screenshoter final {
+	class Direct3D9Capture final {
 
 		Microsoft::WRL::ComPtr<::IDirect3D9>	   mD3D {};	///< Dummy Direct3D 9 object
 		Microsoft::WRL::ComPtr<::IDirect3DDevice9> mDevice {};	///< Dummy device (owns the vtable we read)
@@ -44,16 +44,16 @@ namespace sst {
 	public:
 
 		/// @brief Constructor (registers this as the active instance)
-		DX9Screenshoter() noexcept;
+		Direct3D9Capture() noexcept;
 
 		// Non-copyable, non-movable (registered via a global raw pointer)
-		DX9Screenshoter(const DX9Screenshoter&)			= delete;
-		DX9Screenshoter(DX9Screenshoter&&)			= delete;
-		auto operator=(const DX9Screenshoter&) -> DX9Screenshoter&	= delete;
-		auto operator=(DX9Screenshoter&&) -> DX9Screenshoter&	= delete;
+		Direct3D9Capture(const Direct3D9Capture&)			= delete;
+		Direct3D9Capture(Direct3D9Capture&&)			= delete;
+		auto operator=(const Direct3D9Capture&) -> Direct3D9Capture&	= delete;
+		auto operator=(Direct3D9Capture&&) -> Direct3D9Capture&	= delete;
 
 		/// @brief Destructor
-		~DX9Screenshoter() noexcept;
+		~Direct3D9Capture() noexcept;
 
 		/// @brief Locate the device vtable in the host process
 		/// @return true if Direct3D 9 was found and the vtable captured
@@ -77,7 +77,7 @@ namespace sst {
 	/// @brief Hook thread: finds Direct3D 9, then captures on hotkey
 	/// @param param Pointer to the shared "keep running" flag (std::atomic<bool>)
 	/// @return Thread exit code
-	auto __stdcall HookDX9(::LPVOID param) noexcept -> ::DWORD;
+	auto __stdcall direct3D9CaptureThread(::LPVOID param) noexcept -> ::DWORD;
 
 
 } // namespace sst

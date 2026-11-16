@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, modernize-cpp20]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Primary build + test on Windows with MSVC, for both architectures
+  msvc:
+    name: MSVC ${{ matrix.arch }} (${{ matrix.config }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, Win32]
+        config: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure
+        run: cmake -S . -B build -A ${{ matrix.arch }}
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.config }} --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure
+
+  # Secondary cross build on Linux with MinGW-w64 (compile coverage, no run)
+  mingw:
+    name: MinGW-w64 cross (x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install MinGW-w64 and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-mingw-w64-x86-64 ninja-build
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86_64.cmake -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build

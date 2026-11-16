@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////
 ///
 ///	@file
-///	@brief		Direct3D 9 screenshoter implementation
+///	@brief		Direct3D 9 frame capture implementation
 ///	@date		16 Nov 2026
 ///
 ///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
@@ -24,7 +24,7 @@
 // ScreenShotTool common
 #include <common/Common.hpp>
 // ScreenShotTool hook
-#include "DX9Screenshoter.hpp"
+#include "Direct3D9Capture.hpp"
 #include "Capture.hpp"
 #include "Globals.hpp"
 #include "Log.hpp"
@@ -49,7 +49,7 @@ namespace sst {
 
 
 	// Active instance, so the static detour can reach its owner and unhook
-	constinit static DX9Screenshoter* gActive {nullptr};
+	constinit static Direct3D9Capture* gActive {nullptr};
 	// Trampoline to the original EndScene(), set while the hook is installed
 	constinit static EndScene9 gOriginalEndScene {nullptr};
 
@@ -116,13 +116,13 @@ namespace sst {
 
 
 	// Constructor (registers this as the active instance)
-	DX9Screenshoter::DX9Screenshoter() noexcept {
+	Direct3D9Capture::Direct3D9Capture() noexcept {
 		gActive = this;
 		gLog.line(L"DirectX 9 screenshoter initialized.");
 	}
 
 	// Locate the device vtable in the host process
-	auto DX9Screenshoter::search() noexcept -> bool {
+	auto Direct3D9Capture::search() noexcept -> bool {
 
 		// Only bother if the host actually loaded Direct3D 9
 		if (nullptr == ::GetModuleHandleW(L"d3d9.dll")) {
@@ -170,7 +170,7 @@ namespace sst {
 	}
 
 	// Install the EndScene() hook
-	auto DX9Screenshoter::hook() noexcept -> bool {
+	auto Direct3D9Capture::hook() noexcept -> bool {
 		if (nullptr == mVTable) {
 			return false;
 		}
@@ -179,17 +179,17 @@ namespace sst {
 	}
 
 	// Remove the EndScene() hook
-	auto DX9Screenshoter::unhook() noexcept -> bool {
+	auto Direct3D9Capture::unhook() noexcept -> bool {
 		return mHook.uninstall();
 	}
 
 	// Whether a one-shot capture is currently armed
-	auto DX9Screenshoter::hooked() const noexcept -> bool {
+	auto Direct3D9Capture::hooked() const noexcept -> bool {
 		return mHook.installed();
 	}
 
 	// Destructor
-	DX9Screenshoter::~DX9Screenshoter() noexcept {
+	Direct3D9Capture::~Direct3D9Capture() noexcept {
 		static_cast<void>(mHook.uninstall());
 		if (this == gActive) {
 			gActive = nullptr;
@@ -199,8 +199,8 @@ namespace sst {
 
 
 	// Capture thread: waits for the API, then captures on each hotkey press
-	auto __stdcall HookDX9(::LPVOID param) noexcept -> ::DWORD {
-		return runCaptureThread<DX9Screenshoter>(*static_cast<std::atomic<bool>*>(param));
+	auto __stdcall direct3D9CaptureThread(::LPVOID param) noexcept -> ::DWORD {
+		return runCaptureThread<Direct3D9Capture>(*static_cast<std::atomic<bool>*>(param));
 	}
 
 
