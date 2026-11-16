@@ -1,233 +1,158 @@
-#include <windows.h>
-#include <cstdio>
+////////////////////////////////////////////////////////////////
+///
+///	@file
+///	@brief		Inline function hook (trampoline) implementation
+///	@date		16 Nov 2026
+///
+///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
+///			All rights reserved.
+///	@author		Igor Baklykov
+///
 
+
+// Windows
+#include <windows.h>
+// C++
+#include <algorithm>
+#include <bit>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <span>
+// ScreenShotTool hook
 #include "HookFunction.hpp"
 
 
-// Fill memory at address with NOPs
-VOID fillWithNOPs(LPVOID address, DWORD size) {
-
-	// Cast address pointer to LPBYTE
-	LPBYTE start = static_cast<LPBYTE>(address);
-
-	// Fill with 10-byte NOPs while possible
-	while (size >= 10) {
-	
-		memcpy(start, NOP10, 10);
-		start += 10;
-		size -= 10;
-	
-	}
-
-	// Fill remaining space with 1..9-byte NOP
-	switch (size) {
-	
-		case 9:
-			// 9-byte NOP
-			memcpy(start, NOP9, 9);
-		break;
-		case 8:
-			// 8-byte NOP
-			memcpy(start, NOP8, 8);
-		break;
-		case 7:
-			// 7-byte NOP
-			memcpy(start, NOP7, 7);
-		break;
-		case 6:
-			// 6-byte NOP
-			memcpy(start, NOP6, 6);
-		break;
-		case 5:
-			// 5-byte NOP
-			memcpy(start, NOP5, 5);
-		break;
-		case 4:
-			// 4-byte NOP
-			memcpy(start, NOP4, 4);
-		break;
-		case 3:
-			// 3-byte NOP
-			memcpy(start, NOP3, 3);
-		break;
-		case 2:
-			// 2-byte NOP
-			memcpy(start, NOP2, 2);
-		break;
-		case 1:
-			// 1-byte NOP
-			*start = NOP1;
-		break;
-		default:
-			// No remaining bytes to fill with NOPs (when size % 10 = 0)
-		break;
-	
-	}
-
-}
+// ScreenShotTool hook code zone
+namespace sst {
 
 
-// C-tor
-funcHook::funcHook() : targetFunction(NULL),
-					   jumpFragment(NULL),
-					   savedFragmentSize(0),
-					   trampolined(FALSE) {}
-
-// Install function trampoline
-LPCVOID funcHook::install(LPBYTE originalFunction,
-						  LPBYTE trampolineFunction,
-						  const DWORD &trampolineSize) {
-
-	// If trampoline was not previously installed
-	if (trampolined == FALSE) {
-
-		// Save original/trampolined function pointer
-		targetFunction = originalFunction;
-		// Save trampolined fragment size
-		savedFragmentSize = trampolineSize;
-
-		// Jump instruction size
-		DWORD jumpSize;
-
+	// Size in bytes of the absolute jump written into a prologue
 #ifdef _WIN64
-
-		// Jump size in x64
-		jumpSize = 16;
-
+	// x64: push rax; movabs rax, addr; xchg [rsp], rax; ret
+	constexpr std::size_t JUMP_SIZE {16U};
 #else
-
-		// Jump size in x86
-		jumpSize = 5;
-
+	// x86: jmp rel32
+	constexpr std::size_t JUMP_SIZE {5U};
 #endif
 
-		// Allocate memory for jump fragment
-		jumpFragment = new BYTE[trampolineSize + jumpSize];
 
-		// Set policy to read/write function memory
-		DWORD virtualProtectBackup;
-		VirtualProtect(originalFunction,
-					   trampolineSize,
-					   PAGE_READWRITE,
-					   &virtualProtectBackup);
+	// Overwrite a code range with the longest possible NOP encodings
+	void fillWithNOPs(const std::span<std::byte> target) noexcept {
+		auto rest {target};
+		// Lay down 10-byte NOPs while they fit
+		while (rest.size() >= nop::TEN.size()) {
+			std::ranges::copy(nop::TEN, rest.begin());
+			rest = rest.subspan(nop::TEN.size());
+		}
+		// Fill the 1..9-byte remainder with a single NOP of the exact width
+		switch (rest.size()) {
+			case 9U: std::ranges::copy(nop::NINE, rest.begin()); break;
+			case 8U: std::ranges::copy(nop::EIGHT, rest.begin()); break;
+			case 7U: std::ranges::copy(nop::SEVEN, rest.begin()); break;
+			case 6U: std::ranges::copy(nop::SIX, rest.begin()); break;
+			case 5U: std::ranges::copy(nop::FIVE, rest.begin()); break;
+			case 4U: std::ranges::copy(nop::FOUR, rest.begin()); break;
+			case 3U: std::ranges::copy(nop::THREE, rest.begin()); break;
+			case 2U: std::ranges::copy(nop::TWO, rest.begin()); break;
+			case 1U: rest[0] = nop::ONE; break;
+			default: break; // Nothing left to pad
+		}
+	}
 
-		// Copy function fragment to save it
-		memcpy(jumpFragment, originalFunction, trampolineSize);
-		LPBYTE jumpPosition = jumpFragment + trampolineSize;
 
+	// Write an absolute jump to @c destination at @c where (arch-specific encoding)
+	static void writeJump([[maybe_unused]] std::byte* const where, [[maybe_unused]] const void* const destination) noexcept {
 #ifdef _WIN64
-
-		// 0x00:	PUSH	RAX
-		jumpPosition[0] = 0x50;
-		// 0x01:	MOVABS	RAX, x64_address
-		jumpPosition[1] = 0x48;
-		jumpPosition[2] = 0xB8;
-		*(DWORD64*)(jumpPosition + 3) = (DWORD64)originalFunction + trampolineSize;
-		// 0x0B:	XCHG	QWORD PTR [RSP], RAX
-		jumpPosition[11] = 0x48;
-		jumpPosition[12] = 0x87;
-		jumpPosition[13] = 0x04;
-		jumpPosition[14] = 0x24;
-		// 0x0F:	RET
-		jumpPosition[15] = 0xC3;
-
-		// 0x00:	PUSH	RAX
-		originalFunction[0] = 0x50;
-		// 0x01:	MOVABS	RAX, x64_address
-		originalFunction[1] = 0x48;
-		originalFunction[2] = 0xB8;
-		*(DWORD64*)(originalFunction + 3) = (DWORD64)trampolineFunction;
-		// 0x0B:	XCHG	QWORD PTR [RSP], RAX
-		originalFunction[11] = 0x48;
-		originalFunction[12] = 0x87;
-		originalFunction[13] = 0x04;
-		originalFunction[14] = 0x24;
-		// 0x0F:	RET
-		originalFunction[15] = 0xC3;
-
+		// push rax
+		where[0]  = std::byte {0x50};
+		// movabs rax, destination
+		where[1]  = std::byte {0x48};
+		where[2]  = std::byte {0xB8};
+		const auto addr {std::bit_cast<std::uint64_t>(destination)};
+		std::memcpy(where + 3, &addr, sizeof(addr));
+		// xchg qword ptr [rsp], rax
+		where[11] = std::byte {0x48};
+		where[12] = std::byte {0x87};
+		where[13] = std::byte {0x04};
+		where[14] = std::byte {0x24};
+		// ret
+		where[15] = std::byte {0xC3};
 #else
-
-		// 0x00:	JMP	x86_address_offset
-		jumpPosition[0] = 0xE9;
-		*(DWORD*)(jumpPosition + 1) = (DWORD)(originalFunction + trampolineSize - jumpPosition) - jumpSize;
-
-		// 0x00:	JMP	x86_address_offset
-		originalFunction[0] = 0xE9;
-		*(DWORD*)(originalFunction + 1) = (DWORD)(trampolineFunction - originalFunction) - jumpSize;
-
+		// jmp rel32 (relative to the instruction after the 5-byte jump)
+		where[0] = std::byte {0xE9};
+		const auto from   {std::bit_cast<std::uintptr_t>(where) + JUMP_SIZE};
+		const auto to     {std::bit_cast<std::uintptr_t>(destination)};
+		const auto rel32  {static_cast<std::uint32_t>(to - from)};
+		std::memcpy(where + 1, &rel32, sizeof(rel32));
 #endif
-
-		// Fill some function space with NOPs
-		fillWithNOPs(&originalFunction[jumpSize], trampolineSize - jumpSize);
-
-		// Return previous policy for function memory
-		VirtualProtect(originalFunction,
-					   trampolineSize,
-					   virtualProtectBackup,
-					   &virtualProtectBackup);
-
-		// Set falg
-		trampolined = TRUE;
-
-		// Return function address
-		return jumpPosition - trampolineSize;
-	
 	}
 
-	// Return invalid address
-	return NULL;
 
-}
-
-// Uninstall function trampoline
-BOOL funcHook::uninstall() {
-
-	// If function still trampolined
-	if (trampolined == TRUE) {
-
-		// Set policy to read/write function memory
-		DWORD virtualProtectBackup;
-		VirtualProtect(targetFunction,
-					   savedFragmentSize,
-					   PAGE_READWRITE,
-					   &virtualProtectBackup);
-
-		// Restore function space
-		memcpy(targetFunction, jumpFragment, savedFragmentSize);
-
-		// Return previous policy for function memory
-		VirtualProtect(targetFunction,
-					   savedFragmentSize,
-					   virtualProtectBackup,
-					   &virtualProtectBackup);
-
-		// Clean up
-		delete [] jumpFragment;
-		savedFragmentSize = 0;
-		targetFunction = NULL;
-
-		// Reset flag
-		trampolined = FALSE;
-
-		// Trampoline uninstalled
-		return TRUE;
-	
+	// Destructor (restores the original bytes if still installed)
+	funcHook::~funcHook() noexcept {
+		if (mInstalled) {
+			static_cast<void>(uninstall());
+		}
 	}
 
-	// Trampoline was not installed
-	return FALSE;
+	// Install the trampoline
+	auto funcHook::install(const ::LPBYTE originalFunction, const ::LPBYTE detourFunction, const std::size_t patchSize) noexcept -> ::LPCVOID {
+		// Refuse to double-install or to patch fewer bytes than a jump needs
+		if (mInstalled || (patchSize < JUMP_SIZE) || (nullptr == originalFunction)) {
+			return nullptr;
+		}
 
-}
+		mTarget	   = originalFunction;
+		mPatchSize = patchSize;
 
-// D-tor
-funcHook::~funcHook() {
+		auto* const target {std::bit_cast<std::byte*>(originalFunction)};
 
-	// If function is still trampolined
-	if (trampolined = TRUE) {
+		// Trampoline = saved prologue, then a jump back to the rest of the original
+		mTrampoline.assign(patchSize + JUMP_SIZE, nop::ONE);
+		std::memcpy(mTrampoline.data(), target, patchSize);
+		writeJump(mTrampoline.data() + patchSize, target + patchSize);
 
-		// Uninstall trampoline
-		uninstall();
-	
+		// Make the prologue writable, patch it, then restore its protection
+		::DWORD previous {0UL};
+		if (FALSE == ::VirtualProtect(originalFunction, patchSize, PAGE_EXECUTE_READWRITE, &previous)) {
+			mTrampoline.clear();
+			return nullptr;
+		}
+		// Jump to the detour, then NOP-pad the leftover prologue bytes
+		writeJump(target, detourFunction);
+		fillWithNOPs(std::span {target + JUMP_SIZE, patchSize - JUMP_SIZE});
+		static_cast<void>(::VirtualProtect(originalFunction, patchSize, previous, &previous));
+
+		// Let the CPU drop any stale copies of the rewritten bytes
+		static_cast<void>(::FlushInstructionCache(::GetCurrentProcess(), originalFunction, patchSize));
+
+		mInstalled = true;
+		// Trampoline is executable: it holds original code plus a jump back
+		return mTrampoline.data();
 	}
 
-}
+	// Uninstall the trampoline and restore the original bytes
+	auto funcHook::uninstall() noexcept -> bool {
+		if (!mInstalled) {
+			return false;
+		}
+
+		// Make the prologue writable, restore the saved bytes, restore protection
+		::DWORD previous {0UL};
+		if (FALSE != ::VirtualProtect(mTarget, mPatchSize, PAGE_EXECUTE_READWRITE, &previous)) {
+			std::memcpy(mTarget, mTrampoline.data(), mPatchSize);
+			static_cast<void>(::VirtualProtect(mTarget, mPatchSize, previous, &previous));
+			static_cast<void>(::FlushInstructionCache(::GetCurrentProcess(), mTarget, mPatchSize));
+		}
+
+		mTrampoline.clear();
+		mPatchSize = 0U;
+		mTarget	   = nullptr;
+		mInstalled = false;
+
+		return true;
+	}
+
+
+} // namespace sst

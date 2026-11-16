@@ -1,71 +1,168 @@
+////////////////////////////////////////////////////////////////
+///
+///	@file
+///	@brief		OpenGL screenshoter implementation
+///	@date		16 Nov 2026
+///
+///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
+///			All rights reserved.
+///	@author		Igor Baklykov
+///
+
+
+// Windows
 #include <windows.h>
-#include <fstream>
 #include <GL/gl.h>
-
-
-#include "HookFunction.hpp"
+// C++
+#include <atomic>
+#include <bit>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <span>
+#include <vector>
+// ScreenShotTool common
+#include <common/Common.hpp>
+// ScreenShotTool hook
 #include "GLScreenshoter.hpp"
+#include "Globals.hpp"
+#include "Log.hpp"
+#include "WICImage.hpp"
 
 
-// C-tor
-GLScreenshoter::GLScreenshoter() : endFunction(NULL),
-								   endHook(new funcHook()) {
+// ScreenShotTool hook code zone
+namespace sst {
 
-	wcscpy_s(logPath, MAX_PATH, dllPath);
-	wcscat_s(logPath, MAX_PATH, L"\\Logs\\GLLog.txt");
 
-	wcscpy_s(screenPath, MAX_PATH, dllPath);
-	wcscat_s(screenPath, MAX_PATH, L"\\Screenshots\\GLScreenshot.jpg");
-
-	globalGLScreenshoter = this;
-
-}
-
-// Hook DX function
-BOOL DX9Screenshoter::hook() {
-
-	HINSTANCE hOpenGL = GetModuleHandle(L"opengl32.dll");
-
-	if (hOpenGL == NULL) {
-
-		return FALSE;
-	
-	}
-
-	HRESULT h;
-
-	HMODULE hGL = LoadLibrary(L"opengl32");
-
-	if (hGL == NULL) {
-
-		return FALSE;
-	
-	}
-
+	// Bytes of the SwapBuffers prologue to overwrite (whole instructions, >= jump size)
 #ifdef _WIN64
-
-	endFunction = (OPENGLEND)endHook->install(,
-											  (LPBYTE)hookedGLEnd,
-											  19);
-	VirtualProtect(endFunction,
-				   19,
-				   PAGE_EXECUTE_READWRITE,
-				   &previousProtection);
-
+	constexpr std::size_t SWAP_PATCH_SIZE {16U};
 #else
-
-	endFunction = (OPENGLEND)endHook->install(,
-											  (LPBYTE)hookedGLEnd,
-											  5);
-	VirtualProtect(endFunction,
-				   5,
-				   PAGE_EXECUTE_READWRITE,
-				   &previousProtection);
-
+	constexpr std::size_t SWAP_PATCH_SIZE {5U};
 #endif
 
-	FreeModule(hGL);
 
-	return TRUE;
+	// Active instance, so the static detour can reach its owner and unhook
+	constinit static GLScreenshoter* gActive {nullptr};
+	// Trampoline to the original SwapBuffers(), set while the hook is installed
+	constinit static SwapBuffersFn gOriginalSwapBuffers {nullptr};
 
-}
+
+	// Read the current GL framebuffer for device context @c dc and save it as JPEG
+	static auto captureFrame(const ::HDC dc) noexcept -> ::HRESULT {
+
+		// Frame size from the client area of the window behind the DC
+		::RECT client {};
+		if ((nullptr == dc) || (FALSE == ::GetClientRect(::WindowFromDC(dc), &client))) {
+			return E_FAIL;
+		}
+		const auto width  {static_cast<std::uint32_t>(client.right - client.left)};
+		const auto height {static_cast<std::uint32_t>(client.bottom - client.top)};
+		if ((0U == width) || (0U == height)) {
+			return E_FAIL;
+		}
+
+		// glReadPixels returns rows bottom-up, so read into a scratch buffer first
+		const auto stride {width * 4U};
+		std::vector<std::byte> bottomUp (static_cast<std::size_t>(stride) * height);
+		::glReadPixels(0, 0, static_cast<::GLsizei>(width), static_cast<::GLsizei>(height), GL_RGBA, GL_UNSIGNED_BYTE, bottomUp.data());
+
+		// Flip vertically into a top-down buffer for WIC
+		std::vector<std::byte> topDown (bottomUp.size());
+		for (std::uint32_t row {0U}; row < height; ++row) {
+			const auto src {std::span {bottomUp}.subspan(static_cast<std::size_t>(height - 1U - row) * stride, stride)};
+			std::ranges::copy(src, topDown.begin() + static_cast<std::ptrdiff_t>(static_cast<std::size_t>(row) * stride));
+		}
+
+		return wic::saveJpeg(gScreenDir / L"GLScreenshot.jpg", width, height, stride, std::span<const std::byte> {topDown}, wic::pixel_order::rgba);
+	}
+
+
+	// SwapBuffers() replacement: capture, unhook, then swap for real
+	static ::BOOL __stdcall hookedSwapBuffers(const ::HDC dc) noexcept {
+		gLog.line(L"GL: taking screenshot...");
+		if (const auto hr {captureFrame(dc)}; SUCCEEDED(hr)) {
+			gLog.line(L"GL: screenshot OK");
+		}
+		// Remove the hook so the real SwapBuffers() runs without re-entering us
+		if (nullptr != gActive) {
+			static_cast<void>(gActive->unHook());
+		}
+		return (nullptr != gOriginalSwapBuffers) ? gOriginalSwapBuffers(dc) : ::SwapBuffers(dc);
+	}
+
+
+	// Constructor (registers this as the active instance)
+	GLScreenshoter::GLScreenshoter() noexcept {
+		gActive = this;
+		gLog.line(L"OpenGL screenshoter initialized.");
+	}
+
+	// Locate SwapBuffers in the host process
+	auto GLScreenshoter::search() noexcept -> bool {
+		// Only bother once the host has loaded OpenGL
+		if (nullptr == ::GetModuleHandleW(L"opengl32.dll")) {
+			return false;
+		}
+		// SwapBuffers lives in gdi32 (wglSwapBuffers forwards to it)
+		const auto gdi32 {::GetModuleHandleW(L"gdi32.dll")};
+		if (nullptr == gdi32) {
+			return false;
+		}
+		mTarget = std::bit_cast<::LPBYTE>(::GetProcAddress(gdi32, "SwapBuffers"));
+		if (nullptr == mTarget) {
+			return false;
+		}
+		gLog.line(L"OpenGL found.");
+		return true;
+	}
+
+	// Install the SwapBuffers hook
+	auto GLScreenshoter::hook() noexcept -> bool {
+		if (nullptr == mTarget) {
+			return false;
+		}
+		gOriginalSwapBuffers = std::bit_cast<SwapBuffersFn>(mHook.install(mTarget, std::bit_cast<::LPBYTE>(&hookedSwapBuffers), SWAP_PATCH_SIZE));
+		return nullptr != gOriginalSwapBuffers;
+	}
+
+	// Remove the SwapBuffers hook
+	auto GLScreenshoter::unHook() noexcept -> bool {
+		return mHook.uninstall();
+	}
+
+	// Destructor
+	GLScreenshoter::~GLScreenshoter() noexcept {
+		static_cast<void>(mHook.uninstall());
+		if (this == gActive) {
+			gActive = nullptr;
+		}
+		gLog.line(L"OpenGL screenshoter done.");
+	}
+
+
+	// Hook thread: finds OpenGL, then captures on hotkey
+	auto __stdcall HookOpenGL(::LPVOID param) noexcept -> ::DWORD {
+
+		auto* const keepRunning {static_cast<std::atomic<bool>*>(param)};
+		const auto screenshoter {std::make_unique<GLScreenshoter>()};
+
+		// Poll for OpenGL to appear in the host process
+		while (keepRunning->load() && !screenshoter->search()) {
+			::Sleep(500UL);
+		}
+
+		// Capture on F10 / PrintScreen until asked to stop
+		while (keepRunning->load()) {
+			if ((0 != ::GetAsyncKeyState(VK_F10)) || (0 != ::GetAsyncKeyState(VK_SNAPSHOT))) {
+				gLog.line(L"GL: hotkey pressed, hooking SwapBuffers...");
+				static_cast<void>(screenshoter->hook());
+			}
+			::Sleep(200UL);
+		}
+
+		return 0UL;
+	}
+
+
+} // namespace sst

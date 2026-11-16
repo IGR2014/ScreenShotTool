@@ -1,86 +1,82 @@
+////////////////////////////////////////////////////////////////
+///
+///	@file
+///	@brief		Direct3D 11 screenshoter (IDXGISwapChain::Present hook)
+///	@date		16 Nov 2026
+///
+///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
+///			All rights reserved.
+///	@author		Igor Baklykov
+///
+
+
 #pragma once
 
 
-extern std::wfstream*	logFile;
+// Windows
+#include <windows.h>
+#include <d3d11.h>
+#include <wrl/client.h>
+// C++
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+// ScreenShotTool hook
+#include "HookFunction.hpp"
 
 
-extern	WCHAR			logFilePath[MAX_PATH];
-extern	WCHAR			screenPath[MAX_PATH];
+// ScreenShotTool hook code zone
+namespace sst {
 
 
-///////////////////////////////////////////////////////
-//
-//	IDXGISwapChain::Present()
-//
-typedef HRESULT (__stdcall *PRESENT11)(IDXGISwapChain*,
-									   UINT,
-									   UINT); 
+	/// @brief IDXGISwapChain::Present() signature
+	using Present11 = ::HRESULT (__stdcall*)(::IDXGISwapChain*, ::UINT, ::UINT);
 
 
-//////////////////////////////////////
-//
-//	HookDirectX11()
-//
-DWORD __stdcall HookDirectX11(LPVOID);
+	/// @brief Captures a Direct3D 11 frame by hooking IDXGISwapChain::Present()
+	class DX11Screenshoter final {
 
-
-//////////////////////////////////////
-//
-//	Forward declaration of hook class
-//
-class funcHook;
-
-
-////////////////////////////////
-//
-//	DirectX 9 screenshoter class
-//
-class DX11Screenshoter {
-
-	private:
-
-		// ID3D11Device pointer
-		ID3D11Device*			d3d11Device;
-		// ID3D11DeviceContext pointer
-		ID3D11DeviceContext*	d3d11Context;
-		// IDXGISwapChain pointer
-		IDXGISwapChain*			d3d11SwapChain;
-
-		// Pointer to IDirect3DDevice9::Present()
-		PRESENT11				present11Function;
-		// Pointer to IDirect3DDevice9 (vTable)
-		DWORD_PTR*				d3d11DeviceVTable;
-		// IDirect3DDevice9::Present() function hook
-		funcHook*				present11Hook;
+		Microsoft::WRL::ComPtr<::ID3D11Device>		mDevice {};	///< Dummy device (for vtable discovery)
+		Microsoft::WRL::ComPtr<::ID3D11DeviceContext>	mContext {};	///< Dummy context
+		Microsoft::WRL::ComPtr<::IDXGISwapChain>		mSwapChain {};	///< Dummy swap chain (owns the vtable we read)
+		std::uintptr_t*				mVTable {nullptr}; ///< Swap chain vtable
+		funcHook					mHook {};	///< Present() trampoline
 
 
 	public:
 
-		// C-tor
-		DX11Screenshoter();
+		/// @brief Constructor (registers this as the active instance)
+		DX11Screenshoter() noexcept;
 
-		// Look for DX functions
-		BOOL		search();
-		// Hook DX function
-		BOOL		hook();
-		// Unhook DX functions
-		BOOL		unHook();
+		// Non-copyable, non-movable (registered via a global raw pointer)
+		DX11Screenshoter(const DX11Screenshoter&)			= delete;
+		DX11Screenshoter(DX11Screenshoter&&)				= delete;
+		auto operator=(const DX11Screenshoter&) -> DX11Screenshoter&	= delete;
+		auto operator=(DX11Screenshoter&&) -> DX11Screenshoter&		= delete;
 
-		// D-tor
-		~DX11Screenshoter();
+		/// @brief Destructor
+		~DX11Screenshoter() noexcept;
 
-};
+		/// @brief Locate the swap chain vtable in the host process
+		/// @return true if Direct3D 11 was found and the vtable captured
+		[[nodiscard]]
+		auto search() noexcept -> bool;
+		/// @brief Install the Present() hook
+		/// @return true if the hook was installed
+		[[nodiscard]]
+		auto hook() noexcept -> bool;
+		/// @brief Remove the Present() hook
+		/// @return true if a hook was removed
+		auto unHook() noexcept -> bool;
+
+	};
 
 
-////////////////////////////////////////////////////////
-//
-//	LookForDX11() function to search DX11 in application
-//
-DWORD LookForDX11(BOOL*, DX11Screenshoter*);
+	/// @brief Hook thread: finds Direct3D 11, then captures on hotkey
+	/// @param param Pointer to the shared "keep running" flag (std::atomic<bool>)
+	/// @return Thread exit code
+	auto __stdcall HookDX11(::LPVOID param) noexcept -> ::DWORD;
 
 
-///////////////////////////////////////////
-//
-//	HookDX11() thread function to hook DX11
-//
-DWORD __stdcall HookDX11(LPVOID);
+} // namespace sst

@@ -1,131 +1,101 @@
+////////////////////////////////////////////////////////////////
+///
+///	@file
+///	@brief		Hook DLL entry point and global definitions
+///	@date		16 Nov 2026
+///
+///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
+///			All rights reserved.
+///	@author		Igor Baklykov
+///
+
+
+// Windows
 #include <windows.h>
-#include <Shlwapi.h>
-#include <fstream>
-#include <d3dx9.h>
-#include <d3dx11.h>
-
-
+// C++
+#include <array>
+#include <atomic>
+#include <filesystem>
+// ScreenShotTool common
+#include <common/Common.hpp>
+// ScreenShotTool hook
 #include "DX9Screenshoter.hpp"
 #include "DX11Screenshoter.hpp"
+#include "GLScreenshoter.hpp"
+#include "Globals.hpp"
+#include "Log.hpp"
 
 
-#pragma comment(lib, "Shlwapi.lib")
+// ScreenShotTool hook code zone
+namespace sst {
 
 
-typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
-LPFN_ISWOW64PROCESS fnIsWow64Process;
+	// Global definitions declared in Log.hpp / Globals.hpp
+	Logger			gLog {};
+	std::filesystem::path	gScreenDir {};
 
 
-std::wfstream*	logFile;
+	/// @brief Anonymous namespace for DLL-local state
+	namespace {
+
+		/// @brief Shared "keep the hook threads running" flag
+		std::atomic<bool> gKeepRunning {true};
+
+		/// @brief Directory of this DLL (base for Logs/ and Screenshots/)
+		/// @param instance This module's instance handle
+		/// @return Directory containing the DLL
+		[[nodiscard]]
+		auto moduleDirectory(const ::HMODULE instance) noexcept -> std::filesystem::path {
+			std::array<wchar_t, MAX_PATH> buffer {};
+			const auto length {::GetModuleFileNameW(instance, buffer.data(), static_cast<::DWORD>(buffer.size()))};
+			return std::filesystem::path {std::wstring_view {buffer.data(), length}}.parent_path();
+		}
+
+	} // namespace
 
 
-static	WCHAR	dllPath[MAX_PATH];
-		WCHAR	screenPath[MAX_PATH];
-		WCHAR	logFilePath[MAX_PATH];
+} // namespace sst
 
 
-static	BOOL	runSearch = TRUE;
+// Hook DLL entry point
+::BOOL __stdcall DllMain(const ::HINSTANCE instance, const ::DWORD reason, [[maybe_unused]] ::LPVOID reserved) {
 
-
-BOOL __stdcall DllMain(HINSTANCE	hInst,
-					   DWORD		ul_reason_for_call,
-					   LPVOID		lpReserved) {
-
-	HANDLE hHookDX9Thread	= INVALID_HANDLE_VALUE;
-	HANDLE hHookDX11Thread	= INVALID_HANDLE_VALUE;
-
-	switch (ul_reason_for_call) {
+	switch (reason) {
 
 		case DLL_PROCESS_ATTACH: {
 
-			GetModuleFileNameW(hInst, dllPath, MAX_PATH);
-			PathRemoveFileSpecW(dllPath);
+			// Loader lock is held here: do only cheap setup, defer work to threads
+			::DisableThreadLibraryCalls(instance);
 
-			DWORD dwVersion = GetVersion();
-			DWORD dwMajorVersion = (DWORD)(LOBYTE(LOWORD(dwVersion)));
-			DWORD dwMinorVersion = (DWORD)(HIBYTE(LOWORD(dwVersion)));
-	
-			DWORD dwBuild = 0;
-			if (dwVersion < 0x80000000) {
+			const auto base {sst::moduleDirectory(instance)};
+			sst::gScreenDir = base / L"Screenshots";
 
-				dwBuild = (DWORD)(HIWORD(dwVersion));
+			// Make sure the output directories exist
+			std::error_code ec {};
+			std::filesystem::create_directories(sst::gScreenDir, ec);
+			std::filesystem::create_directories(base / L"Logs", ec);
 
-			}
+			static_cast<void>(sst::gLog.open(base / L"Logs" / L"Log.txt"));
+			sst::gLog.line(L"======================================");
+			sst::gLog.line(L"ScreenShotTool hook attached.");
+			sst::gLog.line(L"======================================");
 
-			wcscpy_s(logFilePath, MAX_PATH, dllPath);
-			wcscat_s(logFilePath, MAX_PATH, L"\\Logs\\Log.txt");
-
-			wcscpy_s(screenPath, MAX_PATH, dllPath);
-			wcscat_s(screenPath, MAX_PATH, L"\\Screenshots\\");
-
-			logFile = new std::wfstream();
-			logFile->open(logFilePath, std::ios::out);
-			*logFile << (WCHAR)0xEF << (WCHAR)0xBB << (WCHAR)0xBF;
-
-			logFile->flush();
-			*logFile << L"======================================\n";
-			*logFile << L"OS Windows version:\t";
-			*logFile << dwMajorVersion;
-			*logFile << L".";
-			*logFile << dwMinorVersion;
-			*logFile << L" (build ";
-			*logFile << dwBuild;
-			*logFile << L")\n";
-
-			BOOL bIsWow64 = FALSE;
-			fnIsWow64Process = (LPFN_ISWOW64PROCESS)GetProcAddress(GetModuleHandle(L"kernel32"), "IsWow64Process");
-			if(NULL != fnIsWow64Process) {
-
-				if (!fnIsWow64Process(GetCurrentProcess(), &bIsWow64)) {
-
-					*logFile << L"Application bitness: UNKNOWN!\n\n";
-
-				} else {
-
-					*logFile << L"Application bitness:\t";
-					*logFile << ((bIsWow64 == TRUE) ? L"x86 (32)" : L"x64");
-					*logFile << L"\n\n";
-
-				}
-
-			}
-
-			*logFile << L"DLL path:\t\t";
-			//*logFile << dllPath;
-			*logFile << std::endl;
-			*logFile << std::endl;
-
-			WCHAR buffer[MAX_PATH];
-			GetModuleFileNameW(GetModuleHandle(NULL), buffer, MAX_PATH);
-
-			*logFile << L"Hook target:\t\t";
-			//*logFile << buffer;
-			*logFile << std::endl;
-			*logFile << L"======================================\n";
-			logFile->flush();
-
-			hHookDX9Thread = CreateThread(NULL,
-										  0,
-										  &HookDX9,
-										  &runSearch,
-										  0,
-										  NULL);
-
-			hHookDX11Thread = CreateThread(NULL,
-										   0,
-										   &HookDX11,
-										   &runSearch,
-										   0,
-										   NULL);
+			// One capture thread per supported graphics API
+			static_cast<void>(::CreateThread(nullptr, 0U, &sst::HookDX9, &sst::gKeepRunning, 0U, nullptr));
+			static_cast<void>(::CreateThread(nullptr, 0U, &sst::HookDX11, &sst::gKeepRunning, 0U, nullptr));
+			static_cast<void>(::CreateThread(nullptr, 0U, &sst::HookOpenGL, &sst::gKeepRunning, 0U, nullptr));
 
 		} break;
+
 		case DLL_PROCESS_DETACH: {
 
-			CloseHandle(hHookDX9Thread);
-			CloseHandle(hHookDX11Thread);
-			runSearch = FALSE;
+			// Ask the capture threads to stop looping
+			sst::gKeepRunning.store(false);
+			sst::gLog.line(L"ScreenShotTool hook detached.");
 
 		} break;
+
+		default: break;
 
 	}
 
