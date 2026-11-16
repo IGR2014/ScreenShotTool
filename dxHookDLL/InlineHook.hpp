@@ -57,7 +57,7 @@ namespace sst {
 	/// jump to the detour and returns a callable trampoline (saved prologue +
 	/// jump back) so the original behaviour is still reachable. uninstall()
 	/// restores the original bytes.
-	class funcHook final {
+	class InlineHook final {
 
 		::LPBYTE		mTarget {nullptr};	///< Patched function entry point
 		std::vector<std::byte>	mTrampoline {};	///< Saved prologue followed by a jump back
@@ -68,16 +68,16 @@ namespace sst {
 	public:
 
 		/// @brief Default constructor (no hook installed)
-		funcHook() noexcept = default;
+		InlineHook() noexcept = default;
 
 		// Move-only: the trampoline owns a unique code patch
-		funcHook(const funcHook&)			= delete;
-		auto operator=(const funcHook&) -> funcHook&	= delete;
-		funcHook(funcHook&&) noexcept			= default;
-		auto operator=(funcHook&&) noexcept -> funcHook&	= default;
+		InlineHook(const InlineHook&)			= delete;
+		auto operator=(const InlineHook&) -> InlineHook&	= delete;
+		InlineHook(InlineHook&&) noexcept			= default;
+		auto operator=(InlineHook&&) noexcept -> InlineHook&	= default;
 
 		/// @brief Destructor (restores the original bytes if still installed)
-		~funcHook() noexcept;
+		~InlineHook() noexcept;
 
 		/// @brief Install the trampoline
 		/// @param originalFunction Function entry point to patch

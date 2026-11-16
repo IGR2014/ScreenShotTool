@@ -20,7 +20,7 @@
 #include <cstring>
 #include <span>
 // ScreenShotTool hook
-#include "HookFunction.hpp"
+#include "InlineHook.hpp"
 
 
 // ScreenShotTool hook code zone
@@ -90,14 +90,14 @@ namespace sst {
 
 
 	// Destructor (restores the original bytes if still installed)
-	funcHook::~funcHook() noexcept {
+	InlineHook::~InlineHook() noexcept {
 		if (mInstalled) {
 			static_cast<void>(uninstall());
 		}
 	}
 
 	// Install the trampoline
-	auto funcHook::install(const ::LPBYTE originalFunction, const ::LPBYTE detourFunction, const std::size_t patchSize) noexcept -> ::LPCVOID {
+	auto InlineHook::install(const ::LPBYTE originalFunction, const ::LPBYTE detourFunction, const std::size_t patchSize) noexcept -> ::LPCVOID {
 		// Refuse to double-install or to patch fewer bytes than a jump needs
 		if (mInstalled || (patchSize < JUMP_SIZE) || (nullptr == originalFunction)) {
 			return nullptr;
@@ -133,7 +133,7 @@ namespace sst {
 	}
 
 	// Uninstall the trampoline and restore the original bytes
-	auto funcHook::uninstall() noexcept -> bool {
+	auto InlineHook::uninstall() noexcept -> bool {
 		if (!mInstalled) {
 			return false;
 		}

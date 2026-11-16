@@ -59,7 +59,7 @@ add_library(
 	dxHookDLL/DLLMain.cpp
 	dxHookDLL/Log.cpp
 	dxHookDLL/WICImage.cpp
-	dxHookDLL/HookFunction.cpp
+	dxHookDLL/InlineHook.cpp
 	dxHookDLL/DX9Screenshoter.cpp
 	dxHookDLL/DX11Screenshoter.cpp
 	dxHookDLL/GLScreenshoter.cpp

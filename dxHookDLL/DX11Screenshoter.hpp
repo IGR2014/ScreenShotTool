@@ -23,7 +23,7 @@
 #include <cstdint>
 #include <memory>
 // ScreenShotTool hook
-#include "HookFunction.hpp"
+#include "InlineHook.hpp"
 
 
 // ScreenShotTool hook code zone
@@ -41,7 +41,7 @@ namespace sst {
 		Microsoft::WRL::ComPtr<::ID3D11DeviceContext>	mContext {};	///< Dummy context
 		Microsoft::WRL::ComPtr<::IDXGISwapChain>		mSwapChain {};	///< Dummy swap chain (owns the vtable we read)
 		std::uintptr_t*				mVTable {nullptr}; ///< Swap chain vtable
-		funcHook					mHook {};	///< Present() trampoline
+		InlineHook				mHook {};	///< Present() trampoline
 
 
 	public:
@@ -68,7 +68,11 @@ namespace sst {
 		auto hook() noexcept -> bool;
 		/// @brief Remove the Present() hook
 		/// @return true if a hook was removed
-		auto unHook() noexcept -> bool;
+		auto unhook() noexcept -> bool;
+		/// @brief Whether a one-shot capture is currently armed
+		/// @return true while the hook is installed
+		[[nodiscard]]
+		auto hooked() const noexcept -> bool;
 
 	};
 

@@ -25,6 +25,7 @@
 #include <common/Common.hpp>
 // ScreenShotTool hook
 #include "DX9Screenshoter.hpp"
+#include "Capture.hpp"
 #include "Globals.hpp"
 #include "Log.hpp"
 #include "WICImage.hpp"
@@ -108,7 +109,7 @@ namespace sst {
 		}
 		// Remove the hook so the real EndScene() runs without re-entering us
 		if (nullptr != gActive) {
-			static_cast<void>(gActive->unHook());
+			static_cast<void>(gActive->unhook());
 		}
 		return device->EndScene();
 	}
@@ -178,8 +179,13 @@ namespace sst {
 	}
 
 	// Remove the EndScene() hook
-	auto DX9Screenshoter::unHook() noexcept -> bool {
+	auto DX9Screenshoter::unhook() noexcept -> bool {
 		return mHook.uninstall();
+	}
+
+	// Whether a one-shot capture is currently armed
+	auto DX9Screenshoter::hooked() const noexcept -> bool {
+		return mHook.installed();
 	}
 
 	// Destructor
@@ -192,27 +198,9 @@ namespace sst {
 	}
 
 
-	// Hook thread: finds Direct3D 9, then captures on hotkey
+	// Capture thread: waits for the API, then captures on each hotkey press
 	auto __stdcall HookDX9(::LPVOID param) noexcept -> ::DWORD {
-
-		auto* const keepRunning {static_cast<std::atomic<bool>*>(param)};
-		const auto screenshoter {std::make_unique<DX9Screenshoter>()};
-
-		// Poll for Direct3D 9 to appear in the host process
-		while (keepRunning->load() && !screenshoter->search()) {
-			::Sleep(500UL);
-		}
-
-		// Capture on F10 / PrintScreen until asked to stop
-		while (keepRunning->load()) {
-			if ((0 != ::GetAsyncKeyState(VK_F10)) || (0 != ::GetAsyncKeyState(VK_SNAPSHOT))) {
-				gLog.line(L"DX9: hotkey pressed, hooking EndScene...");
-				static_cast<void>(screenshoter->hook());
-			}
-			::Sleep(200UL);
-		}
-
-		return 0UL;
+		return runCaptureThread<DX9Screenshoter>(*static_cast<std::atomic<bool>*>(param));
 	}
 
 
