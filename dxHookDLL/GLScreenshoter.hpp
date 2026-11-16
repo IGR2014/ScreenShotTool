@@ -1,51 +1,78 @@
+////////////////////////////////////////////////////////////////
+///
+///	@file
+///	@brief		OpenGL screenshoter (SwapBuffers hook + glReadPixels)
+///	@date		16 Nov 2026
+///
+///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
+///			All rights reserved.
+///	@author		Igor Baklykov
+///
+
+
 #pragma once
 
 
-extern	WCHAR		dllPath[MAX_PATH];
+// Windows
+#include <windows.h>
+// C++
+#include <atomic>
+// ScreenShotTool hook
+#include "HookFunction.hpp"
 
 
-///////////
-//
-//	glEnd()
-//
-typedef void (*OPENGLEND)();
+// ScreenShotTool hook code zone
+namespace sst {
 
 
-////////////////
-//
-//	HookOpenGL()
-//
-DWORD __stdcall HookOpenGL(LPVOID);
+	/// @brief SwapBuffers() / wglSwapBuffers() signature
+	using SwapBuffersFn = ::BOOL (__stdcall*)(::HDC);
 
 
-// Forward declaration of hook class
-class funcHook;
+	/// @brief Captures an OpenGL frame by hooking SwapBuffers()
+	///
+	/// Rewritten from the original non-functional stub: glReadPixels runs on
+	/// the host's render thread inside the SwapBuffers detour, where a current
+	/// GL context exists, then the frame is saved through WIC.
+	class GLScreenshoter final {
 
-
-// OpenGL screenshoter class
-class GLScreenshoter {
-
-	private:
-
-		// Pointer to IDirect3DDevice9::Present()
-		OPENGLEND		endFunction;
-		// IDirect3DDevice9::Present() function hook
-		funcHook*		endHook;
+		::LPBYTE  mTarget {nullptr}; ///< SwapBuffers entry point
+		funcHook  mHook {};		///< SwapBuffers trampoline
 
 
 	public:
 
-		// C-tor
-		GLScreenshoter();
+		/// @brief Constructor (registers this as the active instance)
+		GLScreenshoter() noexcept;
 
-		// Hook GL function
-		BOOL		hook();
-		// Take screenshot
-		void		takeScreenshot();
-		// Unhook GL functions
-		BOOL		unHook();
+		// Non-copyable, non-movable (registered via a global raw pointer)
+		GLScreenshoter(const GLScreenshoter&)			= delete;
+		GLScreenshoter(GLScreenshoter&&)			= delete;
+		auto operator=(const GLScreenshoter&) -> GLScreenshoter&	= delete;
+		auto operator=(GLScreenshoter&&) -> GLScreenshoter&	= delete;
 
-		// D-tor
-		~GLScreenshoter();
+		/// @brief Destructor
+		~GLScreenshoter() noexcept;
 
-};
+		/// @brief Locate SwapBuffers in the host process
+		/// @return true if OpenGL was found and SwapBuffers resolved
+		[[nodiscard]]
+		auto search() noexcept -> bool;
+		/// @brief Install the SwapBuffers hook
+		/// @return true if the hook was installed
+		[[nodiscard]]
+		auto hook() noexcept -> bool;
+		/// @brief Remove the SwapBuffers hook
+		/// @return true if a hook was removed
+		auto unHook() noexcept -> bool;
+
+	};
+
+
+	/// @brief Hook thread: finds OpenGL, then captures on hotkey
+	/// @param param Pointer to the shared "keep running" flag (std::atomic<bool>)
+	/// @return Thread exit code
+	auto __stdcall HookOpenGL(::LPVOID param) noexcept -> ::DWORD;
+
+
+} // namespace sst

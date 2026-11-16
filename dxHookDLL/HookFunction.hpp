@@ -1,58 +1,102 @@
+////////////////////////////////////////////////////////////////
+///
+///	@file
+///	@brief		Inline function hook (trampoline) over a raw code patch
+///	@date		16 Nov 2026
+///
+///	@copyright	Copyright (c) 2017 - 2026, Igor Baklykov
+///			All rights reserved.
+///	@author		Igor Baklykov
+///
+
+
 #pragma once
 
 
-// 1 byte NOP instruction
-static const BYTE NOP1		= 0x90;
-// 2 bytes 66 NOP instruction
-static const BYTE NOP2[2]	= {0x66, 0x90};
-// 3 bytes 66 66 NOP instruction
-static const BYTE NOP3[3]	= {0x66, 0x66, 0x90};
-// 4 bytes NOP DWORD ptr [EAX + 0x00] instruction
-static const BYTE NOP4[4]	= {0x0F, 0x1F, 0x40, 0x00};
-// 5 bytes NOP DWORD ptr [EAX + EAX * 1 + 0x00] instruction
-static const BYTE NOP5[5]	= {0x0F, 0x1F, 0x44, 0x00, 0x00};
-// 6 bytes 66 NOP DWORD ptr [EAX + EAX * 1 + 0x00]
-static const BYTE NOP6[6]	= {0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00};
-// 7 bytes NOP DWORD ptr [EAX + 0x00000000] instruction
-static const BYTE NOP7[7]	= {0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00};
-// 8 bytes NOP DWORD ptr [EAX + EAX * 1 + 0x00000000] instruction
-static const BYTE NOP8[8]	= {0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00};
-// 9 bytes 66 NOP DWORD ptr [EAX + EAX * 1 + 0x00000000] instruction
-static const BYTE NOP9[9]	= {0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00};
-// 10 bytes 66 66 NOP DWORD ptr [EAX + EAX * 1 + 0x00000000] instruction
-static const BYTE NOP10[10]	= {0x66, 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00};
+// Windows
+#include <windows.h>
+// C++
+#include <array>
+#include <cstddef>
+#include <span>
+#include <vector>
 
 
-// Fill memory at address with NOPs
-VOID fillWithNOPs(LPVOID, DWORD);
+// ScreenShotTool hook code zone
+namespace sst {
 
 
-// Hook (create trampoline) function
-LPCVOID HookFunction(LPBYTE, LPBYTE, const DWORD&);
+	/// @brief Multi-byte NOP encodings (index N - 2 holds the N-byte NOP)
+	///
+	/// Long NOPs let the patched prologue stay a legal instruction stream after
+	/// the jump is written, so the trampoline's saved bytes disassemble cleanly.
+	namespace nop {
+
+		inline constexpr std::byte ONE {std::byte {0x90}};						///< 1 byte: NOP
+		inline constexpr std::array TWO {std::byte {0x66}, std::byte {0x90}};				///< 2 bytes: 66 NOP
+		inline constexpr std::array THREE {std::byte {0x66}, std::byte {0x66}, std::byte {0x90}};	///< 3 bytes: 66 66 NOP
+		inline constexpr std::array FOUR {std::byte {0x0F}, std::byte {0x1F}, std::byte {0x40}, std::byte {0x00}}; ///< 4 bytes
+		inline constexpr std::array FIVE {std::byte {0x0F}, std::byte {0x1F}, std::byte {0x44}, std::byte {0x00}, std::byte {0x00}}; ///< 5 bytes
+		inline constexpr std::array SIX {std::byte {0x66}, std::byte {0x0F}, std::byte {0x1F}, std::byte {0x44}, std::byte {0x00}, std::byte {0x00}}; ///< 6 bytes
+		inline constexpr std::array SEVEN {std::byte {0x0F}, std::byte {0x1F}, std::byte {0x80}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}}; ///< 7 bytes
+		inline constexpr std::array EIGHT {std::byte {0x0F}, std::byte {0x1F}, std::byte {0x84}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}}; ///< 8 bytes
+		inline constexpr std::array NINE {std::byte {0x66}, std::byte {0x0F}, std::byte {0x1F}, std::byte {0x84}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}}; ///< 9 bytes
+		inline constexpr std::array TEN {std::byte {0x66}, std::byte {0x66}, std::byte {0x0F}, std::byte {0x1F}, std::byte {0x84}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}, std::byte {0x00}}; ///< 10 bytes
+
+	} // namespace nop
 
 
-// Function trampolining functionality class
-class funcHook {
+	/// @brief Overwrite a code range with the longest possible NOP encodings
+	/// @param target Writable code bytes to pad (already made writable by the caller)
+	void fillWithNOPs(std::span<std::byte> target) noexcept;
 
-	private:
 
-		LPBYTE		targetFunction;			// Original hooked function
-		LPBYTE		jumpFragment;			// Jump fragment
-		DWORD		savedFragmentSize;		// Size of jump fragment
-		BOOL		trampolined;			// Function trampoline installed flag
+	/// @brief Inline trampoline hook of a function prologue
+	///
+	/// install() overwrites the first @c patchSize bytes of the target with a
+	/// jump to the detour and returns a callable trampoline (saved prologue +
+	/// jump back) so the original behaviour is still reachable. uninstall()
+	/// restores the original bytes.
+	class funcHook final {
+
+		::LPBYTE		mTarget {nullptr};	///< Patched function entry point
+		std::vector<std::byte>	mTrampoline {};	///< Saved prologue followed by a jump back
+		std::size_t		mPatchSize {0U};	///< Number of original bytes overwritten
+		bool			mInstalled {false};	///< Whether the patch is currently applied
 
 
 	public:
 
-		// C-tor
-		funcHook();
+		/// @brief Default constructor (no hook installed)
+		funcHook() noexcept = default;
 
-		// Install function trampoline
-		LPCVOID		install(LPBYTE, LPBYTE, const DWORD&);
-		// Uninstall function trampoline
-		BOOL		uninstall();
+		// Move-only: the trampoline owns a unique code patch
+		funcHook(const funcHook&)			= delete;
+		auto operator=(const funcHook&) -> funcHook&	= delete;
+		funcHook(funcHook&&) noexcept			= default;
+		auto operator=(funcHook&&) noexcept -> funcHook&	= default;
 
-		// D-tor
-		~funcHook();
+		/// @brief Destructor (restores the original bytes if still installed)
+		~funcHook() noexcept;
 
-};
+		/// @brief Install the trampoline
+		/// @param originalFunction Function entry point to patch
+		/// @param detourFunction Replacement function to jump to
+		/// @param patchSize Number of prologue bytes to overwrite (>= jump size)
+		/// @return Callable trampoline address, or nullptr if already installed
+		[[nodiscard]]
+		auto install(::LPBYTE originalFunction, ::LPBYTE detourFunction, std::size_t patchSize) noexcept -> ::LPCVOID;
+		/// @brief Uninstall the trampoline and restore the original bytes
+		/// @return true if a patch was removed (false if nothing was installed)
+		auto uninstall() noexcept -> bool;
+
+		/// @brief Whether the trampoline is currently installed
+		[[nodiscard]]
+		auto installed() const noexcept -> bool {
+			return mInstalled;
+		}
+
+	};
+
+
+} // namespace sst
