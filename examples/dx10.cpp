@@ -90,13 +90,31 @@ namespace {
 		return true;
 	}
 
+	using PFN_CreateDeviceAndSwapChain1 = decltype(&D3D10CreateDeviceAndSwapChain1);
+
+	/// @brief Resolve D3D10CreateDeviceAndSwapChain1 at runtime (d3d10_1.dll ships with Windows,
+	/// but not every toolchain provides its import library, e.g. Ubuntu's MinGW-w64)
+	PFN_CreateDeviceAndSwapChain1 LoadCreate10_1() {
+		static const auto fn = [] {
+			const HMODULE mod = LoadLibraryW(L"d3d10_1.dll");
+			return mod ? reinterpret_cast<PFN_CreateDeviceAndSwapChain1>(
+					     reinterpret_cast<void*>(GetProcAddress(mod, "D3D10CreateDeviceAndSwapChain1")))
+				   : nullptr;
+		}();
+		return fn;
+	}
+
 	/// @brief Try to create a D3D10.1 device at the given level; returns true on success
 	bool TryCreate10_1(AppState &state, const DXGI_SWAP_CHAIN_DESC &scd, D3D10_DRIVER_TYPE driver, UINT flags,
 			   D3D10_FEATURE_LEVEL1 level) {
+		const auto create = LoadCreate10_1();
+		if (!create) {
+			return false;
+		}
 		auto		desc	= scd;
 		IDXGISwapChain* sc_raw	= nullptr;
 		ID3D10Device1*	dev_raw = nullptr;
-		const HRESULT	hr	= D3D10CreateDeviceAndSwapChain1(
+		const HRESULT	hr	= create(
 			  nullptr, driver, nullptr, flags, level, D3D10_1_SDK_VERSION, &desc, &sc_raw, &dev_raw
 		  );
 		state.swap_chain.reset(sc_raw);

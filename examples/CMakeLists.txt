@@ -16,5 +16,5 @@ function(sst_add_example name)
 endfunction()
 
 sst_add_example(dx9  d3d9)
-sst_add_example(dx10 d3d10 d3d10_1 dxgi)
+sst_add_example(dx10 d3d10 dxgi) # d3d10_1.dll is loaded at runtime
 sst_add_example(dx11 d3d11 dxgi)
