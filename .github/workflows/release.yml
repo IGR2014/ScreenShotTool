@@ -28,12 +28,12 @@ jobs:
 
       - name: Build x64
         run: |
-          cmake -S . -B build64 -A x64 -DSST_BUILD_TESTS=OFF
+          cmake -S . -B build64 -A x64 -DSST_BUILD_TESTS=OFF -DSST_BUILD_EXAMPLES=OFF
           cmake --build build64 --config Release --parallel
 
       - name: Build Win32
         run: |
-          cmake -S . -B build32 -A Win32 -DSST_BUILD_TESTS=OFF
+          cmake -S . -B build32 -A Win32 -DSST_BUILD_TESTS=OFF -DSST_BUILD_EXAMPLES=OFF
           cmake --build build32 --config Release --parallel
 
       - name: Stage artifacts

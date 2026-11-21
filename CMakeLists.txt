@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.21.0)
 project(
 	ScreenShotTool
 	VERSION		0.2.0
-	DESCRIPTION	"DirectX 9/11 and OpenGL in-game screenshot tool"
+	DESCRIPTION	"DirectX 9/10/11 and OpenGL in-game screenshot tool"
 	LANGUAGES	CXX
 )
 
@@ -36,6 +36,8 @@ endif()
 
 # Build the test suite (on by default; off automatically when used as a subproject)
 option(SST_BUILD_TESTS "Build ScreenShotTool tests" ${PROJECT_IS_TOP_LEVEL})
+# Build the Direct3D example windows (on by default; off automatically when used as a subproject)
+option(SST_BUILD_EXAMPLES "Build ScreenShotTool Direct3D example windows" ${PROJECT_IS_TOP_LEVEL})
 
 # Hook DLL name follows the target bitness (hookX64 / hookX86)
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -123,6 +125,12 @@ target_link_libraries(
 	sst_common
 	user32
 )
+
+
+# Direct3D example windows (hook test targets)
+if(SST_BUILD_EXAMPLES)
+	add_subdirectory(examples)
+endif()
 
 
 # Tests

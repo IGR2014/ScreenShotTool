@@ -63,10 +63,14 @@ namespace sst {
 
 	/// @brief Processes the injector watches for
 	constexpr std::array TARGET_PROCESSES {
-		L"dx11.exe"sv,
-		L"dx9.exe"sv,
-		L"dx11 x64.exe"sv,
-		L"dx9 x64.exe"sv,
+		// Bundled Direct3D example windows (see examples/)
+		L"dx9_x86.exe"sv,
+		L"dx9_x64.exe"sv,
+		L"dx10_x86.exe"sv,
+		L"dx10_x64.exe"sv,
+		L"dx11_x86.exe"sv,
+		L"dx11_x64.exe"sv,
+		// Sample games
 		L"dota2.exe"sv,
 		L"Hearthstone.exe"sv,
 		L"League of Legends.exe"sv,

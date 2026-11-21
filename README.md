@@ -56,6 +56,20 @@ ctest --test-dir build --output-on-failure
 
 Disable with `-DSST_BUILD_TESTS=OFF`.
 
+## Examples
+
+`examples/` contains minimal Direct3D windows that clear the screen every
+frame, useful as hook targets. They are built by default at the top level
+(disable with `-DSST_BUILD_EXAMPLES=OFF`) and named after their bitness —
+`dx9_x64.exe`, `dx10_x86.exe`, … — which `DLLInjector` already watches for.
+Press **Esc** to close.
+
+| Example | Options |
+|---------|---------|
+| `dx9`   | `--mode=d3d9\|d3d9ex`, `--driver=ref`, `--vsync=0` |
+| `dx10`  | `--ver=10.0\|10.1`, `--driver=warp\|reference` |
+| `dx11`  | `--fl=9.1\|9.2\|9.3\|10.0\|10.1\|11.0\|11.1`, `--driver=warp` |
+
 ## Releases
 
 Pushing a `v*` tag runs the release workflow, which builds both
